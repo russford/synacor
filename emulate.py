@@ -107,16 +107,14 @@ class Emulator(object):
     
     def _out(self, a):
         self.stdout += chr(self[a[0]])
+        if chr(self[a[0]]) == '\n': return 1
     
     def _in(self, a):
-        if self.stdout:
-            print (self.stdout, end="")
-            self.stdout = ""
         if self.stdin == "":
             self.code_ptr -= 2
-            raise InputEmptyException
+            return 1
         self[a[0]] = ord(self.stdin[0])
-        print (self.stdin[0], end="")
+        self.stdout += self.stdin[0]
         self.stdin = self.stdin[1:]
 
 
@@ -185,15 +183,12 @@ class Emulator(object):
         if (verbose):
             self.tracelog.append (self.trace(cp))
 
-        f(self,a)
+        return (f(self,a) != 1)
 
     def save_state (self, f):
         data = [self.code_ptr] + [self.registers[a] for a in range(32768, 32776)] + [len(self.stack)] + self.stack + self.code
         data = zip([i & ((1<<8)-1) for i in data], [i >> 8 for i in data])
         data = [v for l in data for v in l]
-        print (self.code_ptr)
-        print (self.registers)
-        print (len(self.stack))
         f.write(bytes(data))
 
     def load_state (self, f):
@@ -202,10 +197,7 @@ class Emulator(object):
         self.code_ptr = data[0]
         for i in range(32768, 32776):
             self.registers[i] = data[i-32767]
-        print (self.code_ptr)
-        print (self.registers)
         stacklen = data[9]
-        print (stacklen)
         self.stack = data[10:10+stacklen].copy()
         self.code = data[10+stacklen:].copy()
         self.tracelog = []
@@ -215,4 +207,3 @@ class Emulator(object):
         data = f.read()
         self.code = [data[i*2] + (data[i*2+1] << 8) for i in range(len(data)//2)]
         if len(self.code) < 32768: self.code += [0]*(32768-len(self.code))
-        print (len(self.code))

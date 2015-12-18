@@ -11,24 +11,26 @@ with open("challenge.bin", "rb") as f:
 try:
     i=0
     while True:
-        try:
-            e.execute(verbose=True)
-            i += 1
-        except InputEmptyException:
-            s = input ("? ")
-            if s == "quit":
-                raise emulate.HaltException
-            if s == "save":
-                with open("state.bin", "wb") as f:
-                    e.save_state(f)
-            if s == "load":
-                with open("state.bin", "rb") as f:
-                    e.load_state(f)
-                    s = input("=? ")+'\n'
-            e.stdin = s+'\n'
-            continue
+        i += 1
+        if not e.execute(verbose=True):
+            if e.stdout:
+                print (e.stdout, end="")
+                e.stdout = ""
+            if not e.stdin:
+                s = input ("? ")
+                if s == "quit":
+                    raise emulate.HaltException
+                elif s == "save":
+                    with open("state.bin", "wb") as f:
+                        e.save_state(f)
+                elif s == "load":
+                    with open("state.bin", "rb") as f:
+                        e.load_state(f)
+                else:
+                    e.stdin = s+'\n'
 
-except HaltException:
+except emulate.HaltException:
+    print ("writing files...")
     with open("trace.txt", "w") as f:
         f.writelines('\n'.join(e.tracelog))
     print("finished: {} instructions".format(i))
