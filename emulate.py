@@ -88,14 +88,36 @@ class Emulator(object):
         self.code[self[a[0]]] = self[a[1]]
 
     def call(self, a):
-        if self[a[0]] == 2125:
+        flag = 1
+
+        if self[a[0]] == 1723:
+            for addr in range(6068, 30050):
+                self.code[addr] ^=  ((addr**2)%32768) ^ 16724
+            self.code[6027:6031] = [1, 32768, 6, 18]
+
+        elif self[a[0]] == 2125:
             self[32768] ^= self[32769]
+
         elif self[a[0]] == 1531:
-            self[32768] ^= self[32770]
-            self.stdout += chr(self[32768])
+            self.stdout += chr(self[32768] ^ self[32770])
+
         elif self[a[0]] == 1528:
             self.stdout += chr(self[32768])
-        else:
+
+        elif self[a[0]] == 1458:
+            if self[32769] in [1528, 1531]:
+                if self[32769] == 1531:
+                    func = lambda x: x^self[32770]
+                else:
+                    func = lambda x: x
+                r0 = self[32768]
+                self.stdout += ''.join([chr(func(c)) for c in self.code[r0+1:r0+self.code[r0]+1]])
+            else:
+                flag = 0
+
+        else: flag = 0
+
+        if not flag:
             self.stack.append(self.code_ptr)
             self.code_ptr = self[a[0]]
             self.call_history[self[a[0]]] += 1
@@ -107,7 +129,7 @@ class Emulator(object):
     
     def _out(self, a):
         self.stdout += chr(self[a[0]])
-        if chr(self[a[0]]) == '\n': return 1
+        # if chr(self[a[0]]) == '\n': return 1
     
     def _in(self, a):
         if self.stdin == "":
@@ -165,12 +187,12 @@ class Emulator(object):
             else:
                 c = "#{:02x} ".format(c)
         elif self.code[cp] == 17:
-            c = "@%d" % self.code[cp+1]
+            c = "@%d" % self[self.code[cp+1]]
 
-        return  "{:>7}: {:<19} r:{} {}".format(
+        return  "{:>7}: {:<19} r:[{}] {}".format(
                             "[%d]" % cp,
                             f.__name__.strip("_") + " " + " ".join([self.c_str(p) for p in self.code[cp+1:cp+n+1]]),
-                            [self[i] for i in range(32768,32776)],
+                            ",".join(["{:>6}".format(self[i]) for i in range(32768,32776)]),
                             c
                     )
 
@@ -207,3 +229,27 @@ class Emulator(object):
         data = f.read()
         self.code = [data[i*2] + (data[i*2+1] << 8) for i in range(len(data)//2)]
         if len(self.code) < 32768: self.code += [0]*(32768-len(self.code))
+
+    def print_code_seg (self, start, end, filename):
+        cp = start
+        strings = []
+        while cp < end:
+            try:
+                f, n = Emulator.dispatch[self.code[cp]]
+                a = self.code[cp+1:cp+n+1]
+                if self.code[cp] == 19:
+                    c = "\\n" if a[0] == 10 else chr(a[0])
+                else:
+                    c = ""
+                strings.append("{:<7}: {:<19} {}\n".format(
+                        cp,
+                        f.__name__.strip("_")+" "+" ".join([self.c_str(p) for p in a]),
+                        c))
+                cp += n+1
+
+            except KeyError:
+                strings.append("{:<7}: 0x{:04x}\n".format(cp, self.code[cp]))
+                cp += 1
+
+        with open(filename, "w") as f:
+            f.writelines(strings)
